@@ -1,4 +1,5 @@
-
+import sys, os
+sys.path.insert(0, os.getcwd())
 import uuid
 import pandas as pd
 from datetime import datetime, timezone
@@ -21,6 +22,11 @@ def load_df(path):
 #Guarda un DataFrame en CSV
 def save_df(df, path):
     df.to_csv(path, index=False)
+
+
+
+
+
 
 print(new_id('ab'))
 print(utc_now_iso())

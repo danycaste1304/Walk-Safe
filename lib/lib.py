@@ -1,5 +1,8 @@
+import sys, os
+sys.path.insert(0, os.getcwd())
 from datetime import datetime, timezone, timedelta
-from utils import utc_now_iso
+from lib.utils import utc_now_iso
+
 
 #Calcula el tiempo transcurrido (la velocidad ahora está en default)
 def eta_minutes_from_km (distance_km, walking_kmh=4.3):
