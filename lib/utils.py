@@ -28,22 +28,3 @@ def save_df(df, path):
 
 
 
-print(new_id('ab'))
-print(utc_now_iso())
-print(load_df(r'C:\Users\USER\OneDrive - Universidad San Francisco de Quito\Quinto Semestre\Proyectos\Walk-Safe\contacts.csv'))
-
-# Al final del archivo, después de las 4 funciones:
-
-if __name__ == "__main__":
-    print("Probando new_id:")
-    print(new_id('ct'))
-    print(new_id('wk'))
-    
-    print("\nProbando utc_now_iso:")
-    print(utc_now_iso())
-    
-    print("\nProbando load_df:")
-    df = load_df('data/contacts.csv')
-    print(f"Contactos cargados: {len(df)} filas")
-    
-    print("\nTodo funciona correctamente!")
