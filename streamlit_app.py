@@ -3,6 +3,9 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw
+import datetime as dt
+from time_utils import time_schedule, summarize_schedule, DAYS_LABELS
+
 
 #Configuracion de la Pagina
 st.set_page_config(page_title="Walk-Safe • Rutas", layout="wide")
@@ -12,6 +15,12 @@ st.sidebar.header("Centro del mapa")
 lat = st.sidebar.number_input("Latitud", value=-0.19685, format="%.6f")   
 lng = st.sidebar.number_input("Longitud", value=-78.43608, format="%.6f") 
 zoom = st.sidebar.slider("Zoom", 10, 19, 16)
+
+#Anadir en sidebar Horarios
+st.sidebar.header("Horarios")
+hora_sel: dt.time = st.sidebar.time_input("Hora", value=dt.time(7, 0))
+dia_sel = st.sidebar.selectbox("Día", DAYS_LABELS, index=1)  
+dia_idx = DAYS_LABELS.index(dia_sel)   
 
 #Cargar rutas Json
 ROUTES_PATH = "routes.json"
@@ -39,9 +48,28 @@ with tab_mapa:
     for i, r in enumerate(routes, start=1):
         coords = r.get("polyline", [])
         name = r.get("name", f"Ruta {i}")
+        sched = r.get("schedule", [])
+
         if not coords:
             continue
-        folium.PolyLine(locations=coords, color="blue", weight=5, tooltip=name).add_to(m1)
+
+        # Sin schedule = neutra (azul). Con schedule = verde/gris según hora/día.
+        if not sched:
+            color, weight = "blue", 5
+            tip = f"{name} — Sin horario"
+        else:
+            in_time = time_schedule(hora_sel, dia_idx, sched)
+            color  = "green" if in_time else "red"
+            weight = 6 if in_time else 4
+            tip = f"{name} — {summarize_schedule(sched)}"
+
+        folium.PolyLine(
+            locations=coords,
+            color=color,
+            weight=weight,
+            tooltip=tip
+        ).add_to(m1)
+
         all_points.extend(coords)
 
     #Punto del campus
