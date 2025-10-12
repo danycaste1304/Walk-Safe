@@ -24,11 +24,6 @@ dia_idx = DAYS_LABELS.index(dia_sel)
 
 pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido"])
 
-if pagina == "Contactos":
-    contacts_component()
-
-if pagina == "Recorrido":
-    show_walk_ui()
 
 #Cargar rutas Json
 ROUTES_PATH = "routes.json"
