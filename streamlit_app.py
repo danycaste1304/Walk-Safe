@@ -11,20 +11,7 @@ from time_utils import time_schedule, summarize_schedule, parse_hhmm, time_range
 st.set_page_config(page_title="Walk-Safe • Rutas", layout="wide")
 st.title("Walk-Safe · Rutas alrededor de la USFQ")
 
-st.sidebar.header("Centro del mapa")
-lat = st.sidebar.number_input("Latitud", value=-0.19685, format="%.6f")   
-lng = st.sidebar.number_input("Longitud", value=-78.43608, format="%.6f") 
-zoom = st.sidebar.slider("Zoom", 10, 19, 16)
-
-#Anadir en sidebar Horarios
-st.sidebar.header("Horarios")
-hora_sel: dt.time = st.sidebar.time_input("Hora", value=dt.time(7, 0))
-dia_sel = st.sidebar.selectbox("Día", DAYS_LABELS, index=1)  
-dia_idx = DAYS_LABELS.index(dia_sel)   
-
-pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido"])
-
-
+#LECTURA ARCHIVOS
 #Cargar rutas Json
 ROUTES_PATH = "routes.json"
 
@@ -42,6 +29,32 @@ with open(ROUTES_PATH, "r", encoding="utf-8") as f:
     routes = json.load(f)
 if not isinstance(routes, list):
     routes = []
+
+#SIDEBAR
+st.sidebar.header("Centro del mapa")
+lat = st.sidebar.number_input("Latitud", value=-0.19685, format="%.6f")   
+lng = st.sidebar.number_input("Longitud", value=-78.43608, format="%.6f") 
+zoom = st.sidebar.slider("Zoom", 10, 19, 16)
+
+#Anadir al sidebar Horarios
+st.sidebar.header("Horarios")
+hora_sel: dt.time = st.sidebar.time_input("Hora", value=dt.time(7, 0))
+dia_sel = st.sidebar.selectbox("Día", DAYS_LABELS, index=1)  
+dia_idx = DAYS_LABELS.index(dia_sel)   
+
+#Anadir al sidebar Incidentes
+st.sidebar.header("Incidentes")
+show_incidents = st.sidebar.checkbox("Mostrar incidentes activos", value=True)
+
+incident_types_all = ["acoso", "zona-oscura", "asalto", "otro"]
+types_filter = st.sidebar.multiselect(
+    "Tipos a mostrar",
+    incident_types_all,
+    default=incident_types_all
+)
+
+pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido"])
+
 
 #crear pestanas
 tab_mapa, tab_editor = st.tabs(["🗺️ Mapa", "✏️ Editor de rutas"])
@@ -83,7 +96,53 @@ with tab_mapa:
     folium.CircleMarker([lat, lng], radius=6, tooltip="Campus / Centro").add_to(m1)
 
     #Incidentes
-    
+    if show_incidents and os.path.exists(INC_PATH):
+        color_map = {"acoso": "red", "zona-oscura": "orange", "asalto": "purple", "otro": "gray"}
+        active_points = []
+
+        with open(INC_PATH, "r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                itype = (row.get("type") or "otro").strip()
+                if itype not in types_filter:
+                    continue
+
+                # coords
+                try:
+                    ilat = float(row["lat"]); ilng = float(row["lng"])
+                except Exception:
+                    continue
+
+                # horario
+                start_s = (row.get("start") or "").strip()
+                end_s   = (row.get("end") or "").strip()
+                days_s  = (row.get("days") or "").strip()
+                if not start_s or not end_s or not days_s:
+                    continue
+
+                try:
+                    t_start = parse_hhmm(start_s)
+                    t_end   = parse_hhmm(end_s)
+                    days_list = [int(x) for x in days_s.split(",") if x.strip().isdigit()]
+                except Exception:
+                    continue
+
+                # ¿activo ahora?
+                is_active = (dia_idx in days_list) and time_range(hora_sel, t_start, t_end)
+                if not is_active:
+                    continue
+
+                # dibujar
+                color = color_map.get(itype, "gray")
+                desc  = (row.get("description") or "").strip()
+
+                folium.CircleMarker(
+                    location=[ilat, ilng],
+                    radius=6,
+                    color=color, fill=True, fill_opacity=0.9,
+                    tooltip=f"{itype} — {start_s}-{end_s} — {desc[:80]}"
+                ).add_to(m1)
+                active_points.append([ilat, ilng])
 
     #render del mapa  
     st_folium(m1, width="100%", height=640, key="map_view")
