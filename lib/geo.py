@@ -1,5 +1,4 @@
 
-
 from math import radians, cos, sin, asin, sqrt, atan2
 
 #Calcula la distancia en kilometros entre 2 coordenadas (a y b)
@@ -19,5 +18,3 @@ def haversine_km(a_lat, a_lng, b_lat, b_lng):
     r = 6371
     return r * c
 
-#Prueba
-print(haversine_km(-0.2192, -78.5094, -0.2500, -78.5200))

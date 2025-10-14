@@ -1,13 +1,17 @@
+
 import streamlit as st
 import pandas as pd
 from urllib.parse import quote
+from streamlit_autorefresh import st_autorefresh
+import time
 import sys
 import os
+import json
 sys.path.insert(0, os.getcwd())
 
 from lib.utils import load_df, save_df, new_id, utc_now_iso
 from lib.geo import haversine_km
-from lib.lib import eta_minutes_from_km
+from lib.lib import eta_minutes_from_km, countdown_seconds
 
 
 #Funciones auxiliares
@@ -23,6 +27,7 @@ def mensaje_salida(o_lat, o_lng, d_lat, d_lng, eta_min, gracia_min, user_initial
         
 #Creacion de link de whatsapp
 def whatsapp_link(phone,message,country_code='593'):
+    phone = str(phone)
     clean_phone = ''.join(filter(str.isdigit, phone))
     # Si el número empieza con 0, quitarlo
     if clean_phone.startswith('0'):
@@ -33,57 +38,66 @@ def whatsapp_link(phone,message,country_code='593'):
     wpp=quote(message)
     return f"https://wa.me/{clean_phone}?text={wpp}"
 
+#Convierte tanto comas como puntos a formato float válido
+def normalize_number(value):
+    if value is None:
+        return None
+    # Convertir a string, reemplazar coma por punto
+    value_str = str(value).replace(',', '.')
+    try:
+        return float(value_str)
+    except ValueError:
+        return None 
+
+def has_default_contact():
+    required_keys = ['default_contact_id', 'default_contact_name']
+    return all(key in st.session_state and st.session_state[key] for key in required_keys)
+
+def cargar_routes():
+    try:
+        with open('routes.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+
 #Funcion principal 
 def show_walk_ui():
     """
     Interfaz de usuario para iniciar una caminata segura.
     Permite al usuario:
     - Seleccionar origen (A) y destino (B)
-    - Ver la distancia y ETA calculada
+    - Ver la distancia y tiempo (aproximado) de recorrido calculado
     - Ajustar minutos de gracia
     - Seleccionar contacto de emergencia
     - Iniciar la caminata y guardarla en walks.csv
     """
+
     # Contenedores para mensajes dinámicos
-    message_container = st.empty()
     whatsapp_container = st.empty()
     status_container = st.empty()
-    
 
-    #Convierte tanto comas como puntos a formato float válido
-    def normalize_number(value):
-        if value is None:
-            return None
-        # Convertir a string, reemplazar coma por punto
-        value_str = str(value).replace(',', '.')
-        try:
-            return float(value_str)
-        except ValueError:
-            return None   
+    routes = cargar_routes()
+
+    if not routes:
+        st.warning("No hay rutas disponibles")
+        st.stop()
+
+    # Selector de ruta
+    nombres_rutas = [r['name'] for r in routes]
+    ruta_seleccionada = st.selectbox("Selecciona una ruta", nombres_rutas)
+
+    # Buscar ruta
+    ruta = next((r for r in routes if r['name'] == ruta_seleccionada), None)
+
+    if ruta:
+        a_lat, a_lng = ruta['polyline'][0]
+        b_lat, b_lng = ruta['polyline'][-1]
         
-    #Seleccionar origen
-    st.subheader("Origen")
-    col1, col2 = st.columns(2)
-    with col1:
-        a_lat = st.number_input("Latitud A", format="%.4f")
-    with col2:
-        a_lng = st.number_input("Longitud A", format="%.4f")
-    
-    #Seleccionar destino
-    st.subheader("Destino")
-    col3, col4 = st.columns(2)
-    with col3:
-        b_lat = st.number_input("Latitud B", format="%.4f")
-    with col4:
-        b_lng = st.number_input("Longitud B", format="%.4f")
-
-    # Normalizar los valores ingresados
-    a_lat = normalize_number(a_lat)
-    a_lng = normalize_number(a_lng)
-    b_lat = normalize_number(b_lat)
-    b_lng = normalize_number(b_lng)
    
-   #Calcular la distancia entre el origen y el destino (se asume una velocidad por default de 4.3 km/h)
+    #2) Calcular métricas que se muestran en la pantalla
+
+    #Calcular la distancia entre el origen y el destino (se asume una velocidad por default de 4.3 km/h)
     distance= haversine_km(a_lat, a_lng, b_lat, b_lng)
     st.metric("📍 Distancia total", f"{distance:.2f} km")
 
@@ -94,107 +108,228 @@ def show_walk_ui():
     #Tiempo extra permitido antes de activar la alerta (por defecto 15 min, mínimo 5 min)
     st.markdown("### ⚡ Tiempo extra de seguridad")
     st.caption("Si no confirmas tu llegada después del tiempo estimado + tiempo extra, enviaremos una alerta a tu contacto")
-    gracia= st.number_input('Minutos de gracia',min_value=5, value=15)
+    gracia= st.number_input('Minutos de gracia',min_value=0, value=5)
     
    # Mostrar qué contacto de emergencia será notificado
-    if 'default_contact_id' in st.session_state and st.session_state['default_contact_id']:
+    if has_default_contact():
          st.success(f"✨ {st.session_state['default_contact_name']} está lista para cuidarte en este viaje")
     else:
         st.warning("👋 Primero selecciona a alguien de confianza como tu contacto de seguridad")
 
     #Validaciones (todos los campos esten completos)
-    if a_lat is None or a_lng is None or b_lat is None or b_lng is None:
-        st.warning(" Completa Origen y Destino")
-    elif distance == 0:
-        st.warning(" Origen y Destino deben ser diferentes")
+    if (a_lat != 0 or a_lng != 0 or b_lat != 0 or b_lng != 0) and distance > 0:
 
-    st.divider()
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        #Boton para iniciar recorrido
-        if st.button("🚶‍♀️ Iniciar mi camino"):   
-            walk = {
-                'id': new_id('wk'),
-                'userInitials': 'DC',
-                'o_lat': a_lat,
-                'o_lng': a_lng,
-                'd_lat': b_lat,
-                'd_lng': b_lng,
-                'etaMin': int(time),
-                'graceMin': int(gracia),
-                'startedAt': utc_now_iso(),
-                'status': 'ACTIVE',
-                'contactId': st.session_state['default_contact_id']
-            }
+        st.divider()
 
-            # Convertir diccionario a DataFrame y guardar
-            walk_df = pd.DataFrame([walk])
-            save_df(walk_df, r'walks.csv')
-
-            # Guardar el ID de la caminata
-            st.session_state['active_walk_id'] = walk['id']
-
-            # Mostrar resumen de la caminata
-            message_container.markdown(f"""
-            ### 🌟 Resumen de tu viaje
-            
-            #### Detalles del recorrido:
-            - 🚶‍♀️ **Distancia**: {distance:.2f} km
-            - ⏱️ **Tiempo estimado**: {time:.0f} minutos
-            - ⚡ **Tiempo extra**: {gracia} minutos
-            - 👤 **Contacto**: {st.session_state['default_contact_name']}
-            
-            > 💝 ¡Tu seguridad es nuestra prioridad! 
-            """)
-
-            # Preparar y enviar mensaje de WhatsApp
-            contacts = load_df(r'contacts.csv')
-            contact_id = st.session_state.get('default_contact_id')
-            if contact_id:
-                contact = contacts[contacts['id'] == contact_id].iloc[0]
-                phone = contact['whatsapp']
-                mensaje = mensaje_salida(a_lat, a_lng, b_lat, b_lng, time, gracia, 'DC')
-                try:
-                    link = whatsapp_link(phone, mensaje)
-                    whatsapp_container.markdown(f"[📱 Enviar mensaje de salida]({link})")
-                    status_container.success('✨ ¡Recorrido iniciado!')
-                except ValueError as e:
-                    status_container.error(f"Error: {str(e)}")
-
-       
-    with col2:
-
-        if st.button("🏠 ¡Llegué a salvo!"):  
-            walks=load_df(r'walks.csv')
+        col1, col2 = st.columns(2)
+   
+        with col1:
             walk_id = st.session_state.get('active_walk_id')
             
+    #3) Botón de iniciar mi camino
+
             if walk_id:
-                # Obtener el contacto nuevamente
-                contacts = load_df(r'contacts.csv')
-                contact_id = st.session_state.get('default_contact_id')
-                if contact_id:
-                    contact = contacts[contacts['id'] == contact_id].iloc[0]
-                    phone = contact['whatsapp']  
+            # Ya hay caminata activa, deshabilitar botón
+                st.button("🚶‍♀️ Iniciar mi camino", disabled=True)
+                st.caption("Ya tienes una caminata en progreso. Marca 'Llegué a salvo' para terminarla.")
+            else:
+            #Boton para iniciar recorrido
+                if st.button("🚶‍♀️ Iniciar mi camino"):   
+
+                    #diccionario con todos los datos de la caminata
+                    walk = {
+                        'id': new_id('wk'),
+                        'userInitials': 'DC',
+                        'o_lat': a_lat,
+                        'o_lng': a_lng,
+                        'd_lat': b_lat,
+                        'd_lng': b_lng,
+                        'etaMin': int(time),
+                        'graceMin': int(gracia),
+                        'startedAt': utc_now_iso(),
+                        'status': 'ACTIVE',
+                        'contactId': st.session_state['default_contact_id']
+                    }
+                    walks_df = load_df(r'walks.csv')
+                    # Convertir diccionario a DataFrame y guardar
+                    walk_df = pd.DataFrame([walk])
+                    walks_df = pd.concat([walks_df, walk_df], ignore_index=True)
+                    save_df(walks_df, r'walks.csv')
+
                     
-                walks.loc[walks['id'] == walk_id, 'status'] = 'ARRIVED' # Cambiar status en el DataFrame
-                save_df(walks, r'walks.csv') #Guardar el csv actualizado
 
-                # Limpiar mensajes anteriores
-                message_container.empty()
-                whatsapp_container.empty()
+                    # Validar que el contacto existe
+                    contacts = load_df(r'contacts.csv') #cargar base de datos 
+                    contact_match = contacts[contacts['id'] == walk['contactId']]
+                    if contact_match.empty:
+                        status_container.error("❌ Contacto no encontrado en la base de datos")
+                        st.session_state['active_walk_id'] = None  # Revertir
+                        return
+
+                    contact = contact_match.iloc[0]
+                    
+                    # Guardar el ID de la caminata y el wpp
+                    st.session_state['active_walk_id'] = walk['id']
+                    st.session_state['active_contact_phone'] = contact['whatsapp']
+
+                    # Mostrar resumen de la caminata
+                    resumen = (f"""
+                    ### 🌟 Resumen de tu viaje
                 
-                # Mostrar mensaje de llegada
-                status_container.success("🎉 ¡Has llegado a tu destino!")
-                st.balloons()
+                    - 🚶‍♀️ **Distancia**: {distance:.2f} km
+                    - ⏱️ **Tiempo estimado**: {time:.0f} minutos
+                    - ⚡ **Tiempo extra**: {gracia} minutos
+                    - 👤 **Contacto**: {st.session_state['default_contact_name']}
+                    
+                    > 💝 ¡Tu seguridad es nuestra prioridad! 
+                    """)
+                    st.session_state['walk_summary'] = resumen
 
-                # Mensaje de WhatsApp de llegada
-                mensaje_llegada = "¡Hola! Ya llegué a mi destino sana y salva 🌟"
-                try:
-                    link_llegada = whatsapp_link(phone, mensaje_llegada)
-                    whatsapp_container.markdown(f"[📱 Enviar mensaje de llegada]({link_llegada})")
-                except ValueError as e:
-                    status_container.error(f"Error: {str(e)}")
+                    # Limpiar mensajes de llegada anterior
+                    st.session_state['arrival_message'] = None
+                    st.session_state['arrival_status'] = None
+                    
+                    # Preparar y enviar mensaje de WhatsApp
+                    contact_id = walk['contactId'] #obtener el id del contacto determinado
+                    if contact_id:
+                        phone = contact['whatsapp']
+                        
+                        mensaje = mensaje_salida(a_lat, a_lng, b_lat, b_lng, int(time), int(gracia), 'DC')
+                        try:
+                            link = whatsapp_link(phone, mensaje)
+                            whatsapp_container.markdown(f"[📱 Enviar mensaje de salida]({link})")
+                            status_container.success('✨ ¡Recorrido iniciado!')
+                            # Guardar en session_state para que persista
+                            st.session_state['walk_message'] = f"[📱 Enviar mensaje de salida]({link})"
+                            st.session_state['walk_status'] = 'ACTIVE'
+                        except ValueError as e:
+                            status_container.error(f"Error: {str(e)}")
+
+        #4) Botón llegué a salvo
+        with col2:
+            walk_id = st.session_state.get('active_walk_id')
+            phone = st.session_state.get('active_contact_phone')  
+
+            if not walk_id:
+                st.button("🏠 ¡Llegué a salvo!", disabled=True)
+                st.info("Primero inicia una caminata.")
+            else:
+                if st.button("🏠 ¡Llegué a salvo!"):  
+                    walks=load_df(r'walks.csv')
+                  
+                    if walk_id and phone is not None:
+                        if walk_id in walks['id'].values:
+                            walks.loc[walks['id'] == walk_id, 'status'] = 'ARRIVED' # Cambiar status en el DataFrame
+                            save_df(walks, r'walks.csv') #Guardar el csv actualizado
+                        else:
+                            status_container.warning("⚠️ Caminata no encontrada en la base de datos")
+                            
 
 
-#
+                        # Limpiar para permitir nueva caminata
+                        st.session_state['active_walk_id'] = None
+                        st.session_state['active_contact_phone'] = None
+                        st.session_state['walk_message'] = None  
+                        st.session_state['walk_status'] = None 
+                        st.session_state['walk_summary'] = None
+                    
+                        
+                        # Mensaje de WhatsApp de llegada
+                        mensaje_llegada = "¡Hola! Ya llegué a mi destino sana y salva"
+                        try:
+                            link_llegada = whatsapp_link(phone, mensaje_llegada)
+                            
+                            st.success("✅ ¡Enlace de WhatsApp listo! Haz clic para notificar tu llegada")
+                            # Guardar en session_state para que el mensaje persista
+                            st.session_state['arrival_message'] = f"[📱 Enviar mensaje de llegada]({link_llegada})"
+                            st.session_state['arrival_status'] = "🎉 ¡Has llegado a tu destino!"
+                        except ValueError as e:
+                            status_container.error(f"Error: {str(e)}")
+
+        
+    #Validaciones                               
+    else:
+            if a_lat == 0 and a_lng == 0 and b_lat == 0 and b_lng == 0:
+                st.info("Ingresa las coordenadas para comenzar")
+            elif distance == 0:
+                st.warning("Origen y Destino deben ser diferentes")
+    #Mostrar resumen del recorrido
+    if st.session_state.get('active_walk_id') and 'walk_summary' in st.session_state:
+            with st.expander("🌟 Detalles del recorrido", expanded=True):
+                st.markdown(st.session_state['walk_summary'])
+                if 'walk_message' in st.session_state:
+                    st.markdown(st.session_state['walk_message'])
+
+    #Mostrar mensaje de llegada
+    if 'arrival_status' in st.session_state and st.session_state['arrival_status']:
+        st.success(st.session_state['arrival_status'])
+    if 'arrival_message' in st.session_state and st.session_state['arrival_message']:
+        st.markdown(st.session_state['arrival_message'])
+        
+
+###Función para el temporizador
+
+def show_walk_timer():
+    if 'active_walk_id' not in st.session_state or st.session_state['active_walk_id'] is None:
+        return
+    
+    #Cargar el csv actualizado 
+    walks=load_df(r'walks.csv')
+    walk_id = st.session_state.get('active_walk_id')
+    walk= walks[walks['id'] == walk_id]
+
+    # Si no existe la caminata, limpiar los datos
+    if walk.empty:
+        st.session_state['active_walk_id'] = None
+        st.session_state['active_contact_phone'] = None
+        st.rerun()
+        return
+    
+    walk_data = walk.iloc[0]
+    started = walk_data['startedAt']
+    eta_min = int(walk_data['etaMin'])
+    grace_min = int(walk_data['graceMin'])
+    status = walk_data['status']
+
+    #Si la caminata está activa    
+    if status =='ACTIVE':
+        st.subheader("Contador de seguridad")   
+        st_autorefresh(interval=1000, key="timer_refresh")
+        seconds= countdown_seconds(started,eta_min + grace_min)
+        total_seconds = (eta_min + grace_min) * 60
+
+        #Si el contador llega a 0
+        if seconds<=0:
+            walks.loc[walks['id'] == walk_id, 'status'] = 'ALERT_READY'
+            save_df(walks, r'walks.csv')
+            st.warning("⚠️ Tiempo agotado. Se activará la alerta.") 
+            st.rerun()         
+            return
+    
+        # Mostrar contador
+        mins = seconds // 60
+        secs = seconds % 60
+        st.metric("Tiempo restante", f"{mins}:{secs:02d}")
+        st.progress(1 - seconds / total_seconds)
+
+    elif  status=='ALERT_READY':
+        st.error('🚨 ¡ALERTA! Tiempo agotado - No se confirmó llegada')
+        phone = st.session_state.get('active_contact_phone')
+
+        if st.button('Enviar alerta'):
+            mensaje= 'ALERTA. No llegué a mi destino, llámame'      
+            try:
+                link = whatsapp_link(phone, mensaje)
+                st.markdown(f"[Enviar mensaje de alerta]({link})")
+
+                st.session_state['active_walk_id'] = None
+                st.session_state['active_contact_phone'] = None
+                st.session_state['walk_summary'] = None
+                st.session_state['walk_message'] = None
+                st.session_state['arrival_status'] = None
+                st.session_state['arrival_message'] = None    
+            except ValueError as e:
+                st.error(f"Error: {str(e)}")
+        
+            
+
