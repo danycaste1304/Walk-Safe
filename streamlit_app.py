@@ -4,29 +4,16 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw
 import datetime as dt
+import math
+from geo_utils import distance_point_to_polyline_m
 from time_utils import time_schedule, summarize_schedule, parse_hhmm, time_range, DAYS_LABELS
-from contacts import contacts_component  
-from walk import show_walk_ui, show_walk_timer
 
 
 #Configuracion de la Pagina
 st.set_page_config(page_title="Walk-Safe • Rutas", layout="wide")
 st.title("Walk-Safe · Rutas alrededor de la USFQ")
 
-st.sidebar.header("Centro del mapa")
-lat = st.sidebar.number_input("Latitud", value=-0.19685, format="%.6f")   
-lng = st.sidebar.number_input("Longitud", value=-78.43608, format="%.6f") 
-zoom = st.sidebar.slider("Zoom", 10, 19, 16)
-
-#Anadir en sidebar Horarios
-st.sidebar.header("Horarios")
-hora_sel: dt.time = st.sidebar.time_input("Hora", value=dt.time(7, 0))
-dia_sel = st.sidebar.selectbox("Día", DAYS_LABELS, index=1)  
-dia_idx = DAYS_LABELS.index(dia_sel)   
-
-pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido"])
-
-
+#LECTURA ARCHIVOS
 #Cargar rutas Json
 ROUTES_PATH = "routes.json"
 
@@ -45,14 +32,72 @@ with open(ROUTES_PATH, "r", encoding="utf-8") as f:
 if not isinstance(routes, list):
     routes = []
 
-# crear pestañas
+#SIDEBAR
+st.sidebar.header("Centro del mapa")
+lat = st.sidebar.number_input("Latitud", value=-0.19685, format="%.6f")   
+lng = st.sidebar.number_input("Longitud", value=-78.43608, format="%.6f") 
+zoom = st.sidebar.slider("Zoom", 10, 19, 16)
+
+#Anadir al sidebar Horarios
+st.sidebar.header("Horarios")
+hora_sel: dt.time = st.sidebar.time_input("Hora", value=dt.time(7, 0))
+dia_sel = st.sidebar.selectbox("Día", DAYS_LABELS, index=1)  
+dia_idx = DAYS_LABELS.index(dia_sel)   
+
+#Anadir al sidebar Incidentes
+st.sidebar.header("Incidentes")
+show_incidents = st.sidebar.checkbox("Mostrar incidentes activos", value=True)
+
+incident_types_all = ["acoso", "zona-oscura", "asalto", "otro"]
+types_filter = st.sidebar.multiselect(
+    "Tipos a mostrar",
+    incident_types_all,
+    default=incident_types_all
+)
+
+pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido"])
+
+#Constante cercania incidente
+NEAR_RADIUS_M = 100 
+
+
+#crear pestanas
 tab_mapa, tab_editor = st.tabs(["🗺️ Mapa", "✏️ Editor de rutas"])
 
-# pestaña mapa
+#pestana mapa
 with tab_mapa:
     m1 = folium.Map(location=[lat, lng], zoom_start=zoom, control_scale=True)
 
-    # Dibujar rutas existentes
+    #Reunir incidentes
+    active_incidents = []
+    if show_incidents and os.path.exists(INC_PATH):
+        with open(INC_PATH, "r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                itype = (row.get("type") or "otro").strip()
+                if itype not in types_filter:
+                    continue
+                try:
+                    ilat = float(row["lat"]); ilng = float(row["lng"])
+                except Exception:
+                    continue
+                start_s = (row.get("start") or "").strip()
+                end_s   = (row.get("end") or "").strip()
+                days_s  = (row.get("days") or "").strip()
+                if not start_s or not end_s or not days_s:
+                    continue
+                try:
+                    t_start = parse_hhmm(start_s)
+                    t_end   = parse_hhmm(end_s)
+                    days_list = [int(x) for x in days_s.split(",") if x.strip().isdigit()]
+                except Exception:
+                    continue
+                if (dia_idx in days_list) and time_range(hora_sel, t_start, t_end):
+                    active_incidents.append([ilat, ilng])
+
+
+
+    #Dibujar rutas existentes
     all_points = []
     for i, r in enumerate(routes, start=1):
         coords = r.get("polyline", [])
@@ -62,7 +107,7 @@ with tab_mapa:
         if not coords:
             continue
 
-        # Sin schedule = neutra (azul). Con schedule = verde/rojo según hora/día.
+        # Sin schedule = neutra (azul). Con schedule = verde/gris según hora/día.
         if not sched:
             color, weight = "blue", 5
             tip = f"{name} — Sin horario"
@@ -71,6 +116,16 @@ with tab_mapa:
             color  = "green" if in_time else "red"
             weight = 6 if in_time else 4
             tip = f"{name} — {summarize_schedule(sched)}"
+
+        if active_incidents and coords:
+            near = any(
+                distance_point_to_polyline_m(coords, inc) <= NEAR_RADIUS_M
+                for inc in active_incidents
+            )
+            if near:
+                color = "red"
+                weight = max(weight, 6)
+                tip += " • 🚨 incidente activo cerca"
 
         folium.PolyLine(
             locations=coords,
@@ -81,7 +136,7 @@ with tab_mapa:
 
         all_points.extend(coords)
 
-    # Punto del campus
+    #Punto del campus
     folium.CircleMarker([lat, lng], radius=6, tooltip="Campus / Centro").add_to(m1)
 
     #Incidentes
@@ -133,10 +188,10 @@ with tab_mapa:
                 ).add_to(m1)
                 active_points.append([ilat, ilng])
 
-    # Render del mapa
+    #render del mapa  
     st_folium(m1, width="100%", height=640, key="map_view")
 
-# pestaña editor
+#Pestana Rutas
 with tab_editor:
     mode = st.radio("¿Qué quieres crear?", ["Ruta", "Incidente"], horizontal=True)
 
@@ -148,7 +203,7 @@ with tab_editor:
         if "drawing_points" not in st.session_state:
             st.session_state.drawing_points = []
 
-        colA, colB, colC = st.columns([1, 1, 2])
+        colA, colB, colC = st.columns([1,1,2])
         with colA:
             name = st.text_input("Nombre de la ruta", value="Nueva ruta")
         with colB:
@@ -174,20 +229,20 @@ with tab_editor:
                 "circlemarker": False,
                 "marker": False
             },
-            edit_options={"edit": True, "remove": True}
+            edit_options={
+                "edit": True,
+                "remove": True
+            }
         ).add_to(m2)
 
         if len(st.session_state.drawing_points) >= 2:
-            folium.PolyLine(
-                st.session_state.drawing_points,
-                color="red",
-                weight=4,
-                tooltip="trazando…"
-            ).add_to(m2)
+            folium.PolyLine(st.session_state.drawing_points, color="red", weight=4, tooltip="trazando…").add_to(m2)
 
         # Render del editor
         out = st_folium(
-            m2, width="100%", height=640,
+            m2,
+            width="100%",
+            height=640,
             key="map_editor_draw",
             return_on_hover=False
         )
@@ -208,12 +263,13 @@ with tab_editor:
                 coords_lnglat = geom.get("coordinates", [])
                 st.session_state.drawing_points = [[c[1], c[0]] for c in coords_lnglat]
 
-        # Controles (DENTRO del modo Ruta)
-        c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+        # Controles
+        c1, c2, c3, c4 = st.columns([1,1,1,2])
         with c1:
             if st.button("🗑️ Limpiar trazado"):
                 st.session_state.drawing_points = []
         with c2:
+            # Botón para volcar cualquier dibujo del mapa a la sesión (por si editaste con la barra)
             if st.button("⤵️ Tomar último dibujo"):
                 if out and out.get("all_drawings"):
                     last = out["all_drawings"][-1]
@@ -235,17 +291,18 @@ with tab_editor:
                         "id": route_id.strip(),
                         "name": name.strip(),
                         "polyline": st.session_state.drawing_points,
-                        # (opcional) horario por defecto:
-                        # "schedule": [{"start": "07:00", "end": "19:00", "days": [0,1,2,3,4,5,6]}]
+                        # 👇 Horario por defecto: 07:00–19:00, todos los días (0=Dom ... 6=Sáb)
+                        "schedule": [
+                            {"start": "07:00", "end": "19:00", "days": [0,1,2,3,4,5,6]}
+                        ]
                     }
+
                     routes.append(new_route)
                     with open(ROUTES_PATH, "w", encoding="utf-8") as f:
                         json.dump(routes, f, ensure_ascii=False, indent=2)
                     st.success(f"Ruta '{name}' guardada en {ROUTES_PATH}.")
                     st.session_state.drawing_points = []
-
     else:
-        # MODO INCIDENTE
         st.subheader("Usa la herramienta Marker (pin) y haz clic en el mapa para fijar el incidente")
 
         # Estado: punto seleccionado
@@ -254,15 +311,15 @@ with tab_editor:
 
         col1, col2 = st.columns(2)
         with col1:
-            itype = st.selectbox("Tipo", ["acoso", "zona-oscura", "asalto", "otro"], index=0)
+            itype = st.selectbox("Tipo", ["acoso","zona-oscura","asalto","otro"], index=0)
             start_inc = st.time_input("Inicio (HH:MM)", value=dt.time(19, 0))
         with col2:
             idesc = st.text_area("Descripción breve", placeholder="Ej: acoso cerca de parada")
             end_inc = st.time_input("Fin (HH:MM)", value=dt.time(21, 0))
 
         # Días (0=Dom ... 6=Sáb)
-        day_labels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
-        days_sel_labels = st.multiselect("Días", options=day_labels, default=["Lun", "Mar", "Mié", "Jue", "Vie"])
+        day_labels = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"]
+        days_sel_labels = st.multiselect("Días", options=day_labels, default=["Lun","Mar","Mié","Jue","Vie"])
         days_sel = [day_labels.index(x) for x in days_sel_labels]
 
         # Mapa con barra Draw (solo Marker)
@@ -276,7 +333,7 @@ with tab_editor:
                 "rectangle": False,
                 "circle": False,
                 "circlemarker": False,
-                "marker": True
+                "marker": True  # <- activamos el pin
             },
             edit_options={"edit": True, "remove": True}
         ).add_to(m_inc)
@@ -315,8 +372,8 @@ with tab_editor:
                 if lng is not None and lat_ is not None:
                     st.session_state.inc_point = [float(lat_), float(lng)]
 
-        # Controles (DENTRO del modo Incidente)
-        c1, c2, c3 = st.columns([1, 1, 2])
+        # Controles
+        c1, c2, c3 = st.columns([1,1,2])
         with c1:
             if st.button("🗑️ Quitar marcador"):
                 st.session_state.inc_point = None
@@ -340,15 +397,4 @@ with tab_editor:
                 st.success(f"Incidente guardado: {inc_id}")
                 st.session_state.inc_point = None
 
-'''
-elif pagina == "Mi Caminata":
-    st.header("Tu caminata segura")
-        
-    tab1, tab2 = st.tabs(["🚶 Configurar Caminata", "⏱️ Temporizador"])
-        
-    with tab1:
-        show_walk_ui()
-            
-    with tab2:
-        show_walk_timer()
-'''
+
