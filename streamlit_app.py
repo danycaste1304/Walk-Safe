@@ -24,7 +24,7 @@ hora_sel: dt.time = st.sidebar.time_input("Hora", value=dt.time(7, 0))
 dia_sel = st.sidebar.selectbox("Día", DAYS_LABELS, index=1)  
 dia_idx = DAYS_LABELS.index(dia_sel)   
 
-pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido","Mi Caminata"])
+pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido"])
 
 
 #Cargar rutas Json
@@ -45,13 +45,8 @@ with open(ROUTES_PATH, "r", encoding="utf-8") as f:
 if not isinstance(routes, list):
     routes = []
 
-#Mostrar contenido segun la pagina seleccionada
-if pagina == "Contactos":
-    contacts_component()
-
-elif pagina =="Recorrido":
-    #crear pestanas
-    tab_mapa, tab_editor = st.tabs(["🗺️ Mapa", "✏️ Editor de rutas"])
+#crear pestanas
+tab_mapa, tab_editor = st.tabs(["🗺️ Mapa", "✏️ Editor de rutas"])
 
     #pestana mapa
     with tab_mapa:
@@ -89,8 +84,8 @@ elif pagina =="Recorrido":
         #Punto del campus
         folium.CircleMarker([lat, lng], radius=6, tooltip="Campus / Centro").add_to(m1)
 
-        #Incidentes
-        
+    #Incidentes
+    
 
         #render del mapa  
         st_folium(m1, width="100%", height=640, key="map_view")
@@ -167,42 +162,42 @@ elif pagina =="Recorrido":
                     coords_lnglat = geom.get("coordinates", [])
                     st.session_state.drawing_points = [[c[1], c[0]] for c in coords_lnglat]
 
-            # Controles
-            c1, c2, c3, c4 = st.columns([1,1,1,2])
-            with c1:
-                if st.button("🗑️ Limpiar trazado"):
+        # Controles
+        c1, c2, c3, c4 = st.columns([1,1,1,2])
+        with c1:
+            if st.button("🗑️ Limpiar trazado"):
+                st.session_state.drawing_points = []
+        with c2:
+            # Botón para volcar cualquier dibujo del mapa a la sesión (por si editaste con la barra)
+            if st.button("⤵️ Tomar último dibujo"):
+                if out and out.get("all_drawings"):
+                    last = out["all_drawings"][-1]
+                    geom = last.get("geometry", {})
+                    if geom.get("type") == "LineString":
+                        coords_lnglat = geom.get("coordinates", [])
+                        st.session_state.drawing_points = [[c[1], c[0]] for c in coords_lnglat]
+                    else:
+                        st.warning("El último dibujo no es una Polyline.")
+                else:
+                    st.info("No hay dibujos aún. Usa la herramienta Polyline.")
+        with c3:
+            save_enabled = bool(name.strip()) and bool(route_id.strip()) and len(st.session_state.drawing_points) >= 2
+            if st.button("💾 Guardar ruta", disabled=not save_enabled, type="primary"):
+                if any(r.get("id") == route_id for r in routes):
+                    st.error(f"Ya existe una ruta con id='{route_id}'. Elige otro ID.")
+                else:
+                    new_route = {
+                        "id": route_id.strip(),
+                        "name": name.strip(),
+                        "polyline": st.session_state.drawing_points
+                    }
+                    routes.append(new_route)
+                    with open(ROUTES_PATH, "w", encoding="utf-8") as f:
+                        json.dump(routes, f, ensure_ascii=False, indent=2)
+                    st.success(f"Ruta '{name}' guardada en {ROUTES_PATH}.")
                     st.session_state.drawing_points = []
-            with c2:
-                # Botón para volcar cualquier dibujo del mapa a la sesión (por si editaste con la barra)
-                if st.button("⤵️ Tomar último dibujo"):
-                    if out and out.get("all_drawings"):
-                        last = out["all_drawings"][-1]
-                        geom = last.get("geometry", {})
-                        if geom.get("type") == "LineString":
-                            coords_lnglat = geom.get("coordinates", [])
-                            st.session_state.drawing_points = [[c[1], c[0]] for c in coords_lnglat]
-                        else:
-                            st.warning("El último dibujo no es una Polyline.")
-                    else:
-                        st.info("No hay dibujos aún. Usa la herramienta Polyline.")
-            with c3:
-                save_enabled = bool(name.strip()) and bool(route_id.strip()) and len(st.session_state.drawing_points) >= 2
-                if st.button("💾 Guardar ruta", disabled=not save_enabled, type="primary"):
-                    if any(r.get("id") == route_id for r in routes):
-                        st.error(f"Ya existe una ruta con id='{route_id}'. Elige otro ID.")
-                    else:
-                        new_route = {
-                            "id": route_id.strip(),
-                            "name": name.strip(),
-                            "polyline": st.session_state.drawing_points
-                        }
-                        routes.append(new_route)
-                        with open(ROUTES_PATH, "w", encoding="utf-8") as f:
-                            json.dump(routes, f, ensure_ascii=False, indent=2)
-                        st.success(f"Ruta '{name}' guardada en {ROUTES_PATH}.")
-                        st.session_state.drawing_points = []
-        else:
-            st.subheader("Usa la herramienta Marker (pin) y haz clic en el mapa para fijar el incidente")
+    else:
+        st.subheader("Usa la herramienta Marker (pin) y haz clic en el mapa para fijar el incidente")
 
             # Estado: punto seleccionado
             if "inc_point" not in st.session_state:
