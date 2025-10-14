@@ -246,8 +246,13 @@ with tab_editor:
                     new_route = {
                         "id": route_id.strip(),
                         "name": name.strip(),
-                        "polyline": st.session_state.drawing_points
+                        "polyline": st.session_state.drawing_points,
+                        # 👇 Horario por defecto: 07:00–19:00, todos los días (0=Dom ... 6=Sáb)
+                        "schedule": [
+                            {"start": "07:00", "end": "19:00", "days": [0,1,2,3,4,5,6]}
+                        ]
                     }
+
                     routes.append(new_route)
                     with open(ROUTES_PATH, "w", encoding="utf-8") as f:
                         json.dump(routes, f, ensure_ascii=False, indent=2)
