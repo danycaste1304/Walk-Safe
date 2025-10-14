@@ -84,8 +84,54 @@ with tab_mapa:
     # Punto del campus
     folium.CircleMarker([lat, lng], radius=6, tooltip="Campus / Centro").add_to(m1)
 
-    # (Opcional) aquí va tu bloque de "Incidentes" si lo quieres pintar en el mapa
-    # --- Pega aquí tu bloque actual de incidentes si lo tenías ---
+    #Incidentes
+    if show_incidents and os.path.exists(INC_PATH):
+        color_map = {"acoso": "red", "zona-oscura": "orange", "asalto": "purple", "otro": "gray"}
+        active_points = []
+
+        with open(INC_PATH, "r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                itype = (row.get("type") or "otro").strip()
+                if itype not in types_filter:
+                    continue
+
+                # coords
+                try:
+                    ilat = float(row["lat"]); ilng = float(row["lng"])
+                except Exception:
+                    continue
+
+                # horario
+                start_s = (row.get("start") or "").strip()
+                end_s   = (row.get("end") or "").strip()
+                days_s  = (row.get("days") or "").strip()
+                if not start_s or not end_s or not days_s:
+                    continue
+
+                try:
+                    t_start = parse_hhmm(start_s)
+                    t_end   = parse_hhmm(end_s)
+                    days_list = [int(x) for x in days_s.split(",") if x.strip().isdigit()]
+                except Exception:
+                    continue
+
+                # ¿activo ahora?
+                is_active = (dia_idx in days_list) and time_range(hora_sel, t_start, t_end)
+                if not is_active:
+                    continue
+
+                # dibujar
+                color = color_map.get(itype, "gray")
+                desc  = (row.get("description") or "").strip()
+
+                folium.CircleMarker(
+                    location=[ilat, ilng],
+                    radius=6,
+                    color=color, fill=True, fill_opacity=0.9,
+                    tooltip=f"{itype} — {start_s}-{end_s} — {desc[:80]}"
+                ).add_to(m1)
+                active_points.append([ilat, ilng])
 
     # Render del mapa
     st_folium(m1, width="100%", height=640, key="map_view")
