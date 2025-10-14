@@ -7,6 +7,10 @@ import datetime as dt
 import math
 from geo_utils import distance_point_to_polyline_m
 from time_utils import time_schedule, summarize_schedule, parse_hhmm, time_range, DAYS_LABELS
+import sys
+sys.path.insert(0, os.getcwd())
+from contacts import  contacts_component
+from walk import show_walk_ui, show_walk_timer
 
 
 #Configuracion de la Pagina
@@ -55,14 +59,13 @@ types_filter = st.sidebar.multiselect(
     default=incident_types_all
 )
 
-pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido"])
 
 #Constante cercania incidente
 NEAR_RADIUS_M = 100 
 
 
 #crear pestanas
-tab_mapa, tab_editor = st.tabs(["🗺️ Mapa", "✏️ Editor de rutas"])
+tab_mapa, tab_editor, tab_walk = st.tabs(["🗺️ Mapa", "👣 Camino Seguro: Editor", "🛡️ Modo Seguro"])
 
 #pestana mapa
 with tab_mapa:
@@ -397,4 +400,18 @@ with tab_editor:
                 st.success(f"Incidente guardado: {inc_id}")
                 st.session_state.inc_point = None
 
+#Pestaña Caminata
+with tab_walk:
+    st.header("Tu caminata segura")
 
+    cfg_tab, timer_tab, contact_tab = st.tabs(["🚶 Configurar Caminata", "⏱️ Temporizador", "📇 Contacto Seguro"])
+
+    with cfg_tab:
+        show_walk_ui()
+
+    with timer_tab:
+        show_walk_timer()
+
+    with contact_tab:
+        st.subheader("Contacto de Emergencia")
+        contacts_component()  
