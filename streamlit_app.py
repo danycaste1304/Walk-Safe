@@ -4,6 +4,8 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw
 import datetime as dt
+import math
+from geo_utils import distance_point_to_polyline_m
 from time_utils import time_schedule, summarize_schedule, parse_hhmm, time_range, DAYS_LABELS
 
 
@@ -55,6 +57,9 @@ types_filter = st.sidebar.multiselect(
 
 pagina = st.sidebar.selectbox("Sección:", ["Contactos", "Recorrido"])
 
+#Constante cercania incidente
+NEAR_RADIUS_M = 100 
+
 
 #crear pestanas
 tab_mapa, tab_editor = st.tabs(["🗺️ Mapa", "✏️ Editor de rutas"])
@@ -62,6 +67,35 @@ tab_mapa, tab_editor = st.tabs(["🗺️ Mapa", "✏️ Editor de rutas"])
 #pestana mapa
 with tab_mapa:
     m1 = folium.Map(location=[lat, lng], zoom_start=zoom, control_scale=True)
+
+    #Reunir incidentes
+    active_incidents = []
+    if show_incidents and os.path.exists(INC_PATH):
+        with open(INC_PATH, "r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                itype = (row.get("type") or "otro").strip()
+                if itype not in types_filter:
+                    continue
+                try:
+                    ilat = float(row["lat"]); ilng = float(row["lng"])
+                except Exception:
+                    continue
+                start_s = (row.get("start") or "").strip()
+                end_s   = (row.get("end") or "").strip()
+                days_s  = (row.get("days") or "").strip()
+                if not start_s or not end_s or not days_s:
+                    continue
+                try:
+                    t_start = parse_hhmm(start_s)
+                    t_end   = parse_hhmm(end_s)
+                    days_list = [int(x) for x in days_s.split(",") if x.strip().isdigit()]
+                except Exception:
+                    continue
+                if (dia_idx in days_list) and time_range(hora_sel, t_start, t_end):
+                    active_incidents.append([ilat, ilng])
+
+
 
     #Dibujar rutas existentes
     all_points = []
@@ -82,6 +116,16 @@ with tab_mapa:
             color  = "green" if in_time else "red"
             weight = 6 if in_time else 4
             tip = f"{name} — {summarize_schedule(sched)}"
+
+        if active_incidents and coords:
+            near = any(
+                distance_point_to_polyline_m(coords, inc) <= NEAR_RADIUS_M
+                for inc in active_incidents
+            )
+            if near:
+                color = "red"
+                weight = max(weight, 6)
+                tip += " • 🚨 incidente activo cerca"
 
         folium.PolyLine(
             locations=coords,
