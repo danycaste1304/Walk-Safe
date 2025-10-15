@@ -1,5 +1,5 @@
 
-from math import radians, cos, sin, asin, sqrt, atan2
+from math import radians, cos, sin, asin, sqrt
 
 #Calcula la distancia en kilometros entre 2 coordenadas (a y b)
 

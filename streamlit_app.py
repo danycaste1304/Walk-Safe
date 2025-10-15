@@ -410,8 +410,8 @@ with tab_walk:
         show_walk_ui()
 
     with timer_tab:
+        st.caption('El temporizador monitorea tu trayecto y notifica a tus contactos si se excede el tiempo previsto.')
         show_walk_timer()
 
     with contact_tab:
-        st.subheader("Contacto de Emergencia")
         contacts_component()  

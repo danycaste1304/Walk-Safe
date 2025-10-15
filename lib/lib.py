@@ -5,7 +5,7 @@ from lib.utils import utc_now_iso
 
 
 #Calcula el tiempo transcurrido (la velocidad ahora está en default)
-def eta_minutes_from_km (distance_km, walking_kmh=40):
+def eta_minutes_from_km (distance_km, walking_kmh=5):
     time= distance_km/walking_kmh
     return round(time*60)
 

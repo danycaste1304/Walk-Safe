@@ -7,6 +7,8 @@ import time
 import sys
 import os
 import json
+import pyautogui
+import pywhatkit as kit
 sys.path.insert(0, os.getcwd())
 
 from lib.utils import load_df, save_df, new_id, utc_now_iso
@@ -17,13 +19,13 @@ from lib.lib import eta_minutes_from_km, countdown_seconds
 #Funciones auxiliares
 
 #Mensaje que se envia al contacto de emergencia asignado
-def mensaje_salida(o_lat, o_lng, d_lat, d_lng, eta_min, gracia_min, user_initials):
-    return f"""¡Hola! Estoy usando Walk-Safe para mi seguridad.
-    Voy desde ({o_lat:.4f}, {o_lng:.4f}) 
-    Hasta ({d_lat:.4f}, {d_lng:.4f})
-    Llegaré en {eta_min} minutos 
-    Tiempo extra: {gracia_min} min
-    --- {user_initials}"""
+def mensaje_salida(route, eta_min, gracia_min):
+    return f"""
+    Hey! Estoy usando Walk-Safe 
+    En camino por la ruta {route}
+    Llego en {eta_min} min (+{gracia_min} extra).
+    Si me tardo, la app te avisa 
+    """
         
 #Creacion de link de whatsapp
 def whatsapp_link(phone,message,country_code='593'):
@@ -38,16 +40,6 @@ def whatsapp_link(phone,message,country_code='593'):
     wpp=quote(message)
     return f"https://wa.me/{clean_phone}?text={wpp}"
 
-#Convierte tanto comas como puntos a formato float válido
-def normalize_number(value):
-    if value is None:
-        return None
-    # Convertir a string, reemplazar coma por punto
-    value_str = str(value).replace(',', '.')
-    try:
-        return float(value_str)
-    except ValueError:
-        return None 
 
 def has_default_contact():
     required_keys = ['default_contact_id', 'default_contact_name']
@@ -97,7 +89,7 @@ def show_walk_ui():
    
     #2) Calcular métricas que se muestran en la pantalla
 
-    #Calcular la distancia entre el origen y el destino (se asume una velocidad por default de 4.3 km/h)
+    #Calcular la distancia entre el origen y el destino (se asume una velocidad por default de 5 km/h)
     distance= haversine_km(a_lat, a_lng, b_lat, b_lng)
     st.metric("📍 Distancia total", f"{distance:.2f} km")
 
@@ -105,10 +97,10 @@ def show_walk_ui():
     time= eta_minutes_from_km(distance)
     st.metric("⏱️ Tiempo estimado", f"{time:.0f} minutos")
 
-    #Tiempo extra permitido antes de activar la alerta (por defecto 15 min, mínimo 5 min)
+    #Tiempo extra permitido antes de activar la alerta (por defecto 5 min, mínimo 3 min)
     st.markdown("### ⚡ Tiempo extra de seguridad")
     st.caption("Si no confirmas tu llegada después del tiempo estimado + tiempo extra, enviaremos una alerta a tu contacto")
-    gracia= st.number_input('Minutos de gracia',min_value=0, value=5)
+    gracia= st.number_input('Minutos de gracia',min_value=3, value=5)
     
    # Mostrar qué contacto de emergencia será notificado
     if has_default_contact():
@@ -194,7 +186,7 @@ def show_walk_ui():
                     if contact_id:
                         phone = contact['whatsapp']
                         
-                        mensaje = mensaje_salida(a_lat, a_lng, b_lat, b_lng, int(time), int(gracia), 'DC')
+                        mensaje = mensaje_salida(nombres_rutas, int(time), int(gracia))
                         try:
                             link = whatsapp_link(phone, mensaje)
                             whatsapp_container.markdown(f"[📱 Enviar mensaje de salida]({link})")
@@ -235,7 +227,7 @@ def show_walk_ui():
                     
                         
                         # Mensaje de WhatsApp de llegada
-                        mensaje_llegada = "¡Hola! Ya llegué a mi destino sana y salva"
+                        mensaje_llegada = '''Hola! Ya llegué a destino con Walk-Safe. Gracias por estar pendiente!'''
                         try:
                             link_llegada = whatsapp_link(phone, mensaje_llegada)
                             
@@ -271,12 +263,16 @@ def show_walk_ui():
 
 def show_walk_timer():
     if 'active_walk_id' not in st.session_state or st.session_state['active_walk_id'] is None:
+        mins = 0
+        secs = 0
+        st.metric("Tiempo restante", "0:00")
+        st.progress(0) 
         return
-    
     #Cargar el csv actualizado 
     walks=load_df(r'walks.csv')
     walk_id = st.session_state.get('active_walk_id')
     walk= walks[walks['id'] == walk_id]
+
 
     # Si no existe la caminata, limpiar los datos
     if walk.empty:
@@ -311,11 +307,49 @@ def show_walk_timer():
         secs = seconds % 60
         st.metric("Tiempo restante", f"{mins}:{secs:02d}")
         st.progress(1 - seconds / total_seconds)
-
-    elif  status=='ALERT_READY':
+    
+    elif status == 'ALERT_READY':
+    # Prevenir bucle
+        if st.session_state.get('alert_sent'):
+            st.info("🔔 La alerta ya fue procesada")
+            return 
+        
+        
         st.error('🚨 ¡ALERTA! Tiempo agotado - No se confirmó llegada')
         phone = st.session_state.get('active_contact_phone')
+        mensaje = '''Alerta Walk-Safe
+        No llegue a mi destino.
+        El tiempo de ruta se agotó.
+        Por favor, llámame..'''
 
+        try:
+            
+            # Formateo simple
+            phone_clean = str(phone).strip().replace(' ', '').replace('-', '').replace('+', '')
+            
+            if phone_clean.startswith('0'):
+                phone_clean = '593' + phone_clean[1:]
+            elif not phone_clean.startswith('593'):
+                phone_clean = '593' + phone_clean
+                
+            international_phone = '+' + phone_clean
+            st.info(f"📞 Número de contacto:  {international_phone}")
+            
+            #Abrir WhatsApp
+            kit.sendwhatmsg_instantly(international_phone, mensaje, wait_time=8, tab_close=False)
+
+            # Esperar y presionar ENTER para asegurar el envío
+            time.sleep(12)
+            pyautogui.press('enter')
+            st.success("✅ Mensaje enviado exitosamente")
+            st.session_state.alert_sent = True
+            
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
+            
+            st.session_state.alert_sent = True
+
+    '''    
         if st.button('Enviar alerta'):
             mensaje= 'ALERTA. No llegué a mi destino, llámame'      
             try:
@@ -330,6 +364,5 @@ def show_walk_timer():
                 st.session_state['arrival_message'] = None    
             except ValueError as e:
                 st.error(f"Error: {str(e)}")
-        
-            
+    '''
 

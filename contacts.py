@@ -1,10 +1,12 @@
 
 import streamlit as st
 import pandas as pd
+import time
 from lib.utils import new_id, utc_now_iso, load_df, save_df
 
 def contacts_component():
     st.subheader('Contacto de Emergencia')
+    st.caption('Agrega un nuevo contacto que recibirá alertas de emergencia')
 
 #Cargar contactos existentes
     path= 'contacts.csv'
@@ -40,25 +42,29 @@ def contacts_component():
     #Guardar cambios
             save_df(contacts_df, path)
             st.success('Contacto agregado exitosamente!')
-
-
-
-#Mostrar lista de los contactos existentes
-    st.write('----') 
+            time.sleep(1)
+            st.rerun()
+            
+#Mostrar lista de los contactos existentes 
     if contacts_df.empty:
         st.info('No existe ningun contacto agregado')
     else:
         st.write('----') 
-        st.subheader('Contactos')
+        st.subheader('Contactos Agregados')
 # Mostrar informacion de cada contacto
         for i, contacto in contacts_df.iterrows():
             st.write(f"• **{contacto['name']}** | WhatsApp: {contacto['whatsapp']} | Email: {contacto['email']}")
  #Elegir contacto por defecto (favorito)
         st.write("---")
+        
         lista_nombres = contacts_df['name'].tolist() #Convertir la columna nombres a una lista
         nombre_seleccionado = st.selectbox('Seleccionar contacto por defecto', lista_nombres) 
 
 #Actualizar contacto por defecto en session state
+    if st.button('Asignar contacto'):
         contacto_elegido = contacts_df[contacts_df['name'] == nombre_seleccionado].iloc[0]
         st.session_state['default_contact_id'] = contacto_elegido['id']
-        st.session_state['default_contact_name'] = contacto_elegido['name'] 
+        st.session_state['default_contact_name'] = contacto_elegido['name']
+        st.success('Contacto asignado con exito!')
+        time.sleep(1.5)
+        st.rerun()
