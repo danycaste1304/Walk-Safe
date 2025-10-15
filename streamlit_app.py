@@ -4,13 +4,12 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw
 import datetime as dt
-import math
 from geo_utils import distance_point_to_polyline_m
 from time_utils import time_schedule, summarize_schedule, parse_hhmm, time_range, DAYS_LABELS
-import sys
-sys.path.insert(0, os.getcwd())
 from contacts import  contacts_component
 from walk import show_walk_ui, show_walk_timer
+import sys
+sys.path.insert(0, os.getcwd())
 
 
 #Configuracion de la Pagina
@@ -52,7 +51,7 @@ dia_idx = DAYS_LABELS.index(dia_sel)
 st.sidebar.header("Incidentes")
 show_incidents = st.sidebar.checkbox("Mostrar incidentes activos", value=True)
 
-incident_types_all = ["acoso", "zona-oscura", "asalto", "otro"]
+incident_types_all = ["acoso", "asalto", "otro"]
 types_filter = st.sidebar.multiselect(
     "Tipos a mostrar",
     incident_types_all,
