@@ -328,7 +328,6 @@ def show_walk_timer():
             
             # Formateo simple
             phone_clean = str(phone).strip().replace(' ', '').replace('-', '').replace('+', '')
-            
             if phone_clean.startswith('0'):
                 phone_clean = '593' + phone_clean[1:]
             elif not phone_clean.startswith('593'):
@@ -338,11 +337,11 @@ def show_walk_timer():
             st.info(f"📞 Número de contacto:  {international_phone}")
             
             #Abrir WhatsApp
-            kit.sendwhatmsg_instantly(international_phone, mensaje, wait_time=5, tab_close=False)
+            kit.sendwhatmsg_instantly(international_phone, mensaje, wait_time=10, tab_close=False)
 
             # Esperar y presionar ENTER para asegurar el envío
-            time.sleep(10)
-            pyautogui.press('enter')
+            #time.sleep(10)
+            #pyautogui.press('enter')
             st.success("✅ Mensaje enviado exitosamente")
             st.session_state.alert_sent = True
             
@@ -350,21 +349,9 @@ def show_walk_timer():
             st.error(f"❌ Error: {e}")
             
             st.session_state.alert_sent = True
+          
+     # Eliminar el archivo después de enviar
+    if os.path.exists("PyWhatKit_DB.txt"):
+            os.remove("PyWhatKit_DB.txt")
 
-    '''    
-        if st.button('Enviar alerta'):
-            mensaje= 'ALERTA. No llegué a mi destino, llámame'      
-            try:
-                link = whatsapp_link(phone, mensaje)
-                st.markdown(f"[Enviar mensaje de alerta]({link})")
-
-                st.session_state['active_walk_id'] = None
-                st.session_state['active_contact_phone'] = None
-                st.session_state['walk_summary'] = None
-                st.session_state['walk_message'] = None
-                st.session_state['arrival_status'] = None
-                st.session_state['arrival_message'] = None    
-            except ValueError as e:
-                st.error(f"Error: {str(e)}")
-    '''
-
+    
