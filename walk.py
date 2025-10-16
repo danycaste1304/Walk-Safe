@@ -22,7 +22,7 @@ from lib.lib import eta_minutes_from_km, countdown_seconds
 def mensaje_salida(route, eta_min, gracia_min):
     return f"""
     Hey! Estoy usando Walk-Safe 
-    En camino por la ruta {route}
+    En camino por la ruta: {route}
     Llego en {eta_min} min (+{gracia_min} extra).
     Si me tardo, la app te avisa 
     """
@@ -186,7 +186,7 @@ def show_walk_ui():
                     if contact_id:
                         phone = contact['whatsapp']
                         
-                        mensaje = mensaje_salida(nombres_rutas, int(time), int(gracia))
+                        mensaje = mensaje_salida(ruta_seleccionada, int(time), int(gracia))
                         try:
                             link = whatsapp_link(phone, mensaje)
                             whatsapp_container.markdown(f"[📱 Enviar mensaje de salida]({link})")
@@ -302,7 +302,7 @@ def show_walk_timer():
             st.rerun()         
             return
     
-        # Mostrar contador
+        # 5) Mostrar contador
         mins = seconds // 60
         secs = seconds % 60
         st.metric("Tiempo restante", f"{mins}:{secs:02d}")
@@ -320,8 +320,10 @@ def show_walk_timer():
         mensaje = '''Alerta Walk-Safe
         No llegue a mi destino.
         El tiempo de ruta se agotó.
-        Por favor, llámame..'''
+        Por favor, llámame.'''
 
+        #6) Enviar mensaje automaticamente por WhatsApp si se acaba el tiempo. 
+        # (Se debe tener previamente iniciada una sesión en WhatsApp Web)
         try:
             
             # Formateo simple
@@ -336,10 +338,10 @@ def show_walk_timer():
             st.info(f"📞 Número de contacto:  {international_phone}")
             
             #Abrir WhatsApp
-            kit.sendwhatmsg_instantly(international_phone, mensaje, wait_time=8, tab_close=False)
+            kit.sendwhatmsg_instantly(international_phone, mensaje, wait_time=5, tab_close=False)
 
             # Esperar y presionar ENTER para asegurar el envío
-            time.sleep(12)
+            time.sleep(10)
             pyautogui.press('enter')
             st.success("✅ Mensaje enviado exitosamente")
             st.session_state.alert_sent = True

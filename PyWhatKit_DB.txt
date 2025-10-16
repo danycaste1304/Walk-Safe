@@ -188,3 +188,28 @@ Time: 0:58
 Phone Number: +593986682514
 Message: Alerta Walk-Safe No llegue a mi destino. El tiempo de ruta se agotó. Por favor, llámame..
 --------------------
+Date: 15/10/2025
+Time: 17:49
+Phone Number: +593990615927
+Message: Alerta Walk-Safe No llegue a mi destino. El tiempo de ruta se agotó. Por favor, llámame..
+--------------------
+Date: 15/10/2025
+Time: 19:25
+Phone Number: +593990615927
+Message: Alerta Walk-Safe No llegue a mi destino. El tiempo de ruta se agotó. Por favor, llámame..
+--------------------
+Date: 15/10/2025
+Time: 19:34
+Phone Number: +593986682514
+Message: Alerta Walk-Safe No llegue a mi destino. El tiempo de ruta se agotó. Por favor, llámame..
+--------------------
+Date: 15/10/2025
+Time: 19:41
+Phone Number: +593986682514
+Message: Alerta Walk-Safe No llegue a mi destino. El tiempo de ruta se agotó. Por favor, llámame..
+--------------------
+Date: 15/10/2025
+Time: 19:48
+Phone Number: +593986682514
+Message: Alerta Walk-Safe No llegue a mi destino. El tiempo de ruta se agotó. Por favor, llámame.
+--------------------
