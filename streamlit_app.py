@@ -37,8 +37,6 @@ if not isinstance(routes, list):
 
 #SIDEBAR
 st.sidebar.header("Centro del mapa")
-lat = st.sidebar.number_input("Latitud", value=-0.19685, format="%.6f")   
-lng = st.sidebar.number_input("Longitud", value=-78.43608, format="%.6f") 
 zoom = st.sidebar.slider("Zoom", 10, 19, 16)
 
 #Anadir al sidebar Horarios
@@ -58,10 +56,10 @@ types_filter = st.sidebar.multiselect(
     default=incident_types_all
 )
 
-
-#Constante cercania incidente
+#Constantes
 NEAR_RADIUS_M = 100 
-
+lat=-0.19685
+lng=-78.43608
 
 #crear pestanas
 tab_mapa, tab_editor, tab_walk = st.tabs(["🗺️ Mapa", "👣 Camino Seguro: Editor", "🛡️ Modo Seguro"])
@@ -97,8 +95,6 @@ with tab_mapa:
                 if (dia_idx in days_list) and time_range(hora_sel, t_start, t_end):
                     active_incidents.append([ilat, ilng])
 
-
-
     #Dibujar rutas existentes
     all_points = []
     for i, r in enumerate(routes, start=1):
@@ -109,15 +105,11 @@ with tab_mapa:
         if not coords:
             continue
 
-        # Sin schedule = neutra (azul). Con schedule = verde/gris según hora/día.
-        if not sched:
-            color, weight = "blue", 5
-            tip = f"{name} — Sin horario"
-        else:
-            in_time = time_schedule(hora_sel, dia_idx, sched)
-            color  = "green" if in_time else "red"
-            weight = 6 if in_time else 4
-            tip = f"{name} — {summarize_schedule(sched)}"
+        
+        in_time = time_schedule(hora_sel, dia_idx, sched)
+        color  = "green" if in_time else "red"
+        weight = 6 if in_time else 4
+        tip = f"{name} — {summarize_schedule(sched)}"
 
         if active_incidents and coords:
             near = any(
@@ -143,7 +135,7 @@ with tab_mapa:
 
     #Incidentes
     if show_incidents and os.path.exists(INC_PATH):
-        color_map = {"acoso": "red", "zona-oscura": "orange", "asalto": "purple", "otro": "gray"}
+        color_map = {"acoso": "purple", "asalto": "black", "otro": "gray"}
         active_points = []
 
         with open(INC_PATH, "r", newline="", encoding="utf-8") as f:
@@ -153,7 +145,7 @@ with tab_mapa:
                 if itype not in types_filter:
                     continue
 
-                # coords
+                # coordenadas
                 try:
                     ilat = float(row["lat"]); ilng = float(row["lng"])
                 except Exception:
@@ -173,7 +165,7 @@ with tab_mapa:
                 except Exception:
                     continue
 
-                # ¿activo ahora?
+                #revisar si esta activo
                 is_active = (dia_idx in days_list) and time_range(hora_sel, t_start, t_end)
                 if not is_active:
                     continue
@@ -216,7 +208,7 @@ with tab_editor:
         # Mapa de edición
         m2 = folium.Map(location=[lat, lng], zoom_start=zoom, control_scale=True)
 
-        # Barra de dibujo: solo Polyline (desactivamos lo demás)
+        # Barra de dibujo: solo Polyline 
         Draw(
             export=False,
             position="topleft",
@@ -254,7 +246,7 @@ with tab_editor:
             geom = feature.get("geometry", {})
             if geom.get("type") == "LineString":
                 coords_lnglat = geom.get("coordinates", [])
-                # Convertir de [lng, lat] (GeoJSON) a [lat, lng] (Folium)
+                #Convertir datos
                 st.session_state.drawing_points = [[c[1], c[0]] for c in coords_lnglat]
 
         elif out and out.get("all_drawings"):
@@ -271,7 +263,6 @@ with tab_editor:
             if st.button("🗑️ Limpiar trazado"):
                 st.session_state.drawing_points = []
         with c2:
-            # Botón para volcar cualquier dibujo del mapa a la sesión (por si editaste con la barra)
             if st.button("⤵️ Tomar último dibujo"):
                 if out and out.get("all_drawings"):
                     last = out["all_drawings"][-1]
@@ -293,7 +284,7 @@ with tab_editor:
                         "id": route_id.strip(),
                         "name": name.strip(),
                         "polyline": st.session_state.drawing_points,
-                        # 👇 Horario por defecto: 07:00–19:00, todos los días (0=Dom ... 6=Sáb)
+                        #Horario por defecto
                         "schedule": [
                             {"start": "07:00", "end": "19:00", "days": [0,1,2,3,4,5,6]}
                         ]
@@ -307,13 +298,13 @@ with tab_editor:
     else:
         st.subheader("Usa la herramienta Marker (pin) y haz clic en el mapa para fijar el incidente")
 
-        # Estado: punto seleccionado
+        
         if "inc_point" not in st.session_state:
-            st.session_state.inc_point = None  # [lat, lng] o None
+            st.session_state.inc_point = None 
 
         col1, col2 = st.columns(2)
         with col1:
-            itype = st.selectbox("Tipo", ["acoso","zona-oscura","asalto","otro"], index=0)
+            itype = st.selectbox("Tipo", ["acoso","asalto","otro"], index=0)
             start_inc = st.time_input("Inicio (HH:MM)", value=dt.time(19, 0))
         with col2:
             idesc = st.text_area("Descripción breve", placeholder="Ej: acoso cerca de parada")
@@ -335,7 +326,7 @@ with tab_editor:
                 "rectangle": False,
                 "circle": False,
                 "circlemarker": False,
-                "marker": True  # <- activamos el pin
+                "marker": True  
             },
             edit_options={"edit": True, "remove": True}
         ).add_to(m_inc)
@@ -355,17 +346,16 @@ with tab_editor:
             return_on_hover=False
         )
 
-        # 1) Si hay un dibujo activo (Point), lo tomamos
+        # Dibujo activo
         if out_inc and out_inc.get("last_active_drawing"):
             feat = out_inc["last_active_drawing"]
             geom = feat.get("geometry", {})
             if geom.get("type") == "Point":
-                # GeoJSON: [lng, lat] -> Folium/nuestro: [lat, lng]
                 lng, lat_ = geom.get("coordinates", [None, None])
                 if lng is not None and lat_ is not None:
                     st.session_state.inc_point = [float(lat_), float(lng)]
 
-        # 2) Si no, tomamos el último de todos los dibujos (por si editaron)
+        #Ultimo de todos los dibujos
         elif out_inc and out_inc.get("all_drawings"):
             last = out_inc["all_drawings"][-1]
             geom = last.get("geometry", {})
@@ -374,7 +364,7 @@ with tab_editor:
                 if lng is not None and lat_ is not None:
                     st.session_state.inc_point = [float(lat_), float(lng)]
 
-        # Controles
+        #Controles
         c1, c2, c3 = st.columns([1,1,2])
         with c1:
             if st.button("🗑️ Quitar marcador"):

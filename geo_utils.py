@@ -1,13 +1,12 @@
 import math
 
 def _deg_to_m_scale(lat_deg):
-    # 1° lat ≈ 111_320 m; 1° lon ≈ 111_320 * cos(lat)
     lat_m = 111_320.0
     lon_m = 111_320.0 * math.cos(math.radians(lat_deg))
     return lat_m, lon_m
 
+#Distancia de un punto a un segmento
 def _point_to_segment_dist_m(p, a, b):
-    """Distancia punto–segmento en metros. p,a,b: [lat, lng]."""
     lat0 = (a[0] + b[0]) * 0.5
     lat_m, lon_m = _deg_to_m_scale(lat0)
 
@@ -18,7 +17,6 @@ def _point_to_segment_dist_m(p, a, b):
     abx, aby = bx-ax, by-ay
     ab2 = abx*abx + aby*aby
     if ab2 == 0:
-        # segmento degenerado (a==b)
         dx, dy = px-ax, py-ay
         return math.hypot(dx, dy)
 
@@ -27,8 +25,8 @@ def _point_to_segment_dist_m(p, a, b):
     cx, cy = ax + t*abx, ay + t*aby
     return math.hypot(px-cx, py-cy)
 
+#Dsitancia a una polylinea
 def distance_point_to_polyline_m(polyline, p):
-    """Distancia mínima en metros de p=[lat,lng] a una polilínea [[lat,lng],...]."""
     if not polyline or len(polyline) == 1:
         return float("inf")
     dmin = float("inf")
