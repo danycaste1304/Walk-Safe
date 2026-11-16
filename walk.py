@@ -4,13 +4,12 @@ import pandas as pd
 from urllib.parse import quote
 from streamlit_autorefresh import st_autorefresh
 import time
-import sys
 import os
 import json
-import pyautogui
-import pywhatkit as kit
-sys.path.insert(0, os.getcwd())
+# pywhatkit se importa solo al enviar la alerta (ver show_walk_timer):
+# importarlo aquí rompe la app en compus sin pantalla o sin permisos.
 
+from config import ROUTES_PATH, WALKS_PATH, WALK_FIELDS, CONTACTS_PATH, CONTACT_FIELDS, COUNTRY_CODE
 from lib.utils import load_df, save_df, new_id, utc_now_iso
 from lib.geo import haversine_km
 from lib.lib import eta_minutes_from_km, countdown_seconds
@@ -28,7 +27,7 @@ def mensaje_salida(route, eta_min, gracia_min):
     """
         
 #Creacion de link de whatsapp
-def whatsapp_link(phone,message,country_code='593'):
+def whatsapp_link(phone,message,country_code=COUNTRY_CODE):
     phone = str(phone)
     clean_phone = ''.join(filter(str.isdigit, phone))
     # Si el número empieza con 0, quitarlo
@@ -47,7 +46,7 @@ def has_default_contact():
 
 def cargar_routes():
     try:
-        with open('routes.json', 'r', encoding='utf-8') as f:
+        with open(ROUTES_PATH, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
         return []
@@ -142,16 +141,16 @@ def show_walk_ui():
                         'status': 'ACTIVE',
                         'contactId': st.session_state['default_contact_id']
                     }
-                    walks_df = load_df(r'walks.csv')
+                    walks_df = load_df(WALKS_PATH, WALK_FIELDS)
                     # Convertir diccionario a DataFrame y guardar
                     walk_df = pd.DataFrame([walk])
                     walks_df = pd.concat([walks_df, walk_df], ignore_index=True)
-                    save_df(walks_df, r'walks.csv')
+                    save_df(walks_df, WALKS_PATH)
 
                     
 
                     # Validar que el contacto existe
-                    contacts = load_df(r'contacts.csv') #cargar base de datos 
+                    contacts = load_df(CONTACTS_PATH, CONTACT_FIELDS) #cargar base de datos 
                     contact_match = contacts[contacts['id'] == walk['contactId']]
                     if contact_match.empty:
                         status_container.error("❌ Contacto no encontrado en la base de datos")
@@ -207,12 +206,12 @@ def show_walk_ui():
                 st.info("Primero inicia una caminata.")
             else:
                 if st.button("🏠 ¡Llegué a salvo!"):  
-                    walks=load_df(r'walks.csv')
+                    walks=load_df(WALKS_PATH, WALK_FIELDS)
                   
                     if walk_id and phone is not None:
                         if walk_id in walks['id'].values:
                             walks.loc[walks['id'] == walk_id, 'status'] = 'ARRIVED' # Cambiar status en el DataFrame
-                            save_df(walks, r'walks.csv') #Guardar el csv actualizado
+                            save_df(walks, WALKS_PATH) #Guardar el csv actualizado
                         else:
                             status_container.warning("⚠️ Caminata no encontrada en la base de datos")
                             
@@ -269,7 +268,7 @@ def show_walk_timer():
         st.progress(0) 
         return
     #Cargar el csv actualizado 
-    walks=load_df(r'walks.csv')
+    walks=load_df(WALKS_PATH, WALK_FIELDS)
     walk_id = st.session_state.get('active_walk_id')
     walk= walks[walks['id'] == walk_id]
 
@@ -297,7 +296,7 @@ def show_walk_timer():
         #Si el contador llega a 0
         if seconds<=0:
             walks.loc[walks['id'] == walk_id, 'status'] = 'ALERT_READY'
-            save_df(walks, r'walks.csv')
+            save_df(walks, WALKS_PATH)
             st.warning("⚠️ Tiempo agotado. Se activará la alerta.") 
             st.rerun()         
             return
@@ -329,25 +328,26 @@ def show_walk_timer():
             # Formateo simple
             phone_clean = str(phone).strip().replace(' ', '').replace('-', '').replace('+', '')
             if phone_clean.startswith('0'):
-                phone_clean = '593' + phone_clean[1:]
-            elif not phone_clean.startswith('593'):
-                phone_clean = '593' + phone_clean
-                
+                phone_clean = COUNTRY_CODE + phone_clean[1:]
+            elif not phone_clean.startswith(COUNTRY_CODE):
+                phone_clean = COUNTRY_CODE + phone_clean
+
             international_phone = '+' + phone_clean
             st.info(f"📞 Número de contacto:  {international_phone}")
-            
-            #Abrir WhatsApp
+
+            #Abrir WhatsApp (import aquí para que la app funcione aunque pywhatkit no esté disponible)
+            import pywhatkit as kit
             kit.sendwhatmsg_instantly(international_phone, mensaje, wait_time=10, tab_close=False)
 
-            # Esperar y presionar ENTER para asegurar el envío
-            #time.sleep(10)
-            #pyautogui.press('enter')
             st.success("✅ Mensaje enviado exitosamente")
             st.session_state.alert_sent = True
-            
+
         except Exception as e:
-            st.error(f"❌ Error: {e}")
-            
+            # Si el envío automático falla, se ofrece el link manual de WhatsApp
+            st.error(f"❌ No se pudo enviar automáticamente: {e}")
+            if phone is not None:
+                st.markdown(f"[📱 Enviar alerta por WhatsApp]({whatsapp_link(phone, mensaje)})")
+
             st.session_state.alert_sent = True
           
      # Eliminar el archivo después de enviar

@@ -3,16 +3,15 @@ import streamlit as st
 import pandas as pd
 import time
 from lib.utils import new_id, utc_now_iso, load_df, save_df
+from config import CONTACTS_PATH, CONTACT_FIELDS
 
 def contacts_component():
     st.subheader('Contacto de Emergencia')
     st.caption('Agrega un nuevo contacto que recibirá alertas de emergencia')
 
 #Cargar contactos existentes
-    path= 'contacts.csv'
-    contacts_df = load_df(path)
-    if contacts_df.empty:
-        contacts_df = pd.DataFrame(columns=['id', 'name', 'whatsapp', 'email'])
+    path = CONTACTS_PATH
+    contacts_df = load_df(path, CONTACT_FIELDS)
 
  #Crear formulario para agregar un nuevo contacto
     if "default_contact_id" not in st.session_state:

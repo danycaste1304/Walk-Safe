@@ -1,5 +1,3 @@
-import sys, os
-sys.path.insert(0, os.getcwd())
 import uuid
 import pandas as pd
 from datetime import datetime, timezone
@@ -12,12 +10,18 @@ def new_id(prefix):
 def utc_now_iso():
     return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
-#Carga un CSV, si no existe devuelve DataFrame vacío
-def load_df(path):
+#Carga un CSV. Si no existe o está vacío, devuelve un DataFrame vacío
+#con las columnas indicadas (para que el código que busca columnas no falle)
+def load_df(path, columns=None):
     try:
-        return pd.read_csv(path)
-    except (FileNotFoundError, pd.errors.ParserError, PermissionError):
-        return pd.DataFrame() 
+        df = pd.read_csv(path)
+    except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, PermissionError):
+        df = pd.DataFrame()
+    if columns:
+        for col in columns:
+            if col not in df.columns:
+                df[col] = pd.Series(dtype=object)
+    return df
     
 #Guarda un DataFrame en CSV
 def save_df(df, path):

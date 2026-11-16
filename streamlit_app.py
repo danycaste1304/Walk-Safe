@@ -1,29 +1,25 @@
-import os, json, csv
+import os, sys, json, csv
+from pathlib import Path
+# Asegura que los módulos del proyecto se encuentren sin importar desde dónde se ejecute
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw
 import datetime as dt
+from config import ROUTES_PATH, INCIDENTS_PATH as INC_PATH, INCIDENT_FIELDS as INC_FIELDS
 from geo_utils import distance_point_to_polyline_m
 from time_utils import time_schedule, summarize_schedule, parse_hhmm, time_range, DAYS_LABELS
 from contacts import  contacts_component
 from walk import show_walk_ui, show_walk_timer
-import sys
-sys.path.insert(0, os.getcwd())
 
 
 #Configuracion de la Pagina
 st.set_page_config(page_title="Walk-Safe • Rutas", layout="wide")
 st.title("Walk-Safe · Rutas alrededor de la USFQ")
 
-#LECTURA ARCHIVOS
-#Cargar rutas Json
-ROUTES_PATH = "routes.json"
-
-#Cargar incidentes
-INC_PATH = "incidents.csv"
-INC_FIELDS = ["id","createdAt","lat","lng","type","description","start","end","days"]
-
+#LECTURA ARCHIVOS (rutas definidas en config.py)
 #Crea un json si no existe
 if not os.path.exists(ROUTES_PATH):
     with open(ROUTES_PATH, "w", encoding="utf-8") as f:
@@ -293,7 +289,7 @@ with tab_editor:
                     routes.append(new_route)
                     with open(ROUTES_PATH, "w", encoding="utf-8") as f:
                         json.dump(routes, f, ensure_ascii=False, indent=2)
-                    st.success(f"Ruta '{name}' guardada en {ROUTES_PATH}.")
+                    st.success(f"Ruta '{name}' guardada en {ROUTES_PATH.name}.")
                     st.session_state.drawing_points = []
     else:
         st.subheader("Usa la herramienta Marker (pin) y haz clic en el mapa para fijar el incidente")
