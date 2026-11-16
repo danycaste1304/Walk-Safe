@@ -22,3 +22,6 @@ PyWhatKit_DB.txt
 
 # Archivos generados
 *.zip
+
+# Datos generados por la app
+walks.csv
