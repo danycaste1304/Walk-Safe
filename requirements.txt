@@ -2,5 +2,6 @@ streamlit==1.38.0
 folium==0.17.0
 streamlit-folium==0.22.0
 streamlit-autorefresh==1.0.1
-pandas==2.2.2
-
+pandas==2.2.3
+pyautogui==0.9.54
+pywhatkit==5.4
