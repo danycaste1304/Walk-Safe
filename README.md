@@ -1,43 +1,106 @@
-Walk-Safe
-Creado por: Daniela Castellanos y Vanessa Almagro
+# Walk-Safe
 
-Descripción
-Walk-Safe es una app en Streamlit pensada para chicas que caminan hacia sus hogares alrededor de la USFQ. Mapa (Folium) para trazar rutas y reportar incidentes. Las rutas cambian de color según horario seguro (verde/rojo) y si hay un incidente activo cercano se marcan en rojo. Incluye “Modo Seguro” con temporizador y contacto seguro.
+A Streamlit app for students walking home around USFQ (Quito, Ecuador). It shows walking routes on a map, colors them by how safe they are at a given time, and includes a **Safe Mode** that notifies an emergency contact if you don't arrive on time.
 
-Nota importante
-El punto de entrada de la aplicación es el archivo streamlit_app.py.
+**Authors:** Daniela Castellanos and Vanessa Almagro
 
-Requisitos
-- Python 3.12 (recomendado 3.10+)
-- pip actualizado
-- Windows/macOS/Linux
-- (Opcional WhatsApp) Sesión iniciada en web.whatsapp.com
+## Features
 
-Instalación
-1) Extraer el ZIP en una carpeta (ej: C:\Walk-Safe)
-2) Abrir una terminal en esa carpeta
-3) Crear y activar entorno virtual:
-   Windows:
-     python -m venv .venv
-     .\.venv\Scripts\Activate
-   macOS/Linux:
-     python3 -m venv .venv
-     source .venv/bin/activate
-4) Instalar dependencias:
-   pip install --upgrade pip
-   pip install -r requirements.txt
-5) Ejecutar:
-   streamlit run streamlit_app.py
-   (Si el puerto está ocupado: streamlit run streamlit_app.py --server.port 8502)
+- **Route map**: routes are drawn green (inside their safe schedule) or red (outside it).
+- **Incident reports**: harassment, robbery and other incidents are shown on the map with the days and hours they happen. An active incident within 100 m of a route turns that route red.
+- **Route editor**: draw new routes (polylines) and report incidents (markers) directly on the map.
+- **Safe Mode**:
+  - Set an origin, destination and grace period; the app estimates the walking time.
+  - Generates a WhatsApp link to tell your emergency contact you're leaving.
+  - A countdown timer tracks the walk. Press **"¡Llegué a salvo!"** when you arrive to get a link for the arrival message.
+  - If time runs out, an alert is sent to your contact over WhatsApp Web (or a WhatsApp link is shown to send it manually).
+- **Emergency contacts**: add contacts and choose a default one.
 
-Uso
-- Mapa/Editor: dibujar rutas (Polyline), reportar incidentes (Marker).
-- Ajustar Día/Hora para ver estado de rutas (verde/rojo). Incidentes activos cercanos fuerzan rojo.
-- Modo Seguro: configurar recorrido, usar temporizador, seleccionar contacto seguro.
+> The app interface is in Spanish.
 
-Datos
-- routes.json: rutas con id, name, polyline, schedule (HH:MM y days 0..6).
-- incidents.csv: encabezado: id,createdAt,lat,lng,type,description,start,end,days
+## Requirements
 
-Notas WhatsApp
-- Requiere sesión activa en web.whatsapp.com.
+- Python 3.12 or 3.13
+- (Optional, for automatic alerts) An active session on [web.whatsapp.com](https://web.whatsapp.com) in your default browser
+
+## Installation
+
+```bash
+git clone https://github.com/danycaste1304/Walk-Safe.git
+cd Walk-Safe
+python -m venv .venv
+```
+
+Activate the virtual environment:
+
+```bash
+# Windows (PowerShell)
+.\.venv\Scripts\Activate
+
+# macOS / Linux
+source .venv/bin/activate
+```
+
+Install the dependencies:
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## Running the app
+
+```bash
+streamlit run streamlit_app.py
+```
+
+The app opens at <http://localhost:8501>. If that port is busy:
+
+```bash
+streamlit run streamlit_app.py --server.port 8502
+```
+
+## Usage
+
+1. **🗺️ Mapa**: use the sidebar to pick a day and time and see which routes are safe. Filter incidents by type.
+2. **👣 Camino Seguro: Editor**: draw a route or place a marker to report an incident, then save it.
+3. **🛡️ Modo Seguro**:
+   1. In **📇 Contacto Seguro**, add a contact and assign it as default.
+   2. In **🚶 Configurar Caminata**, enter origin and destination and start the walk.
+   3. Follow the countdown in **⏱️ Temporizador** and confirm when you arrive.
+
+## Project structure
+
+```
+Walk-Safe/
+├── streamlit_app.py   # Entry point: map, editor and tabs
+├── walk.py            # Safe Mode: walk setup, timer and WhatsApp alerts
+├── contacts.py        # Emergency contacts
+├── config.py          # File paths and constants
+├── geo_utils.py       # Distance from a point to a route
+├── time_utils.py      # Schedule helpers
+├── lib/
+│   ├── geo.py         # Haversine distance
+│   ├── lib.py         # ETA and countdown
+│   └── utils.py       # IDs, timestamps and CSV helpers
+├── routes.json        # Saved routes
+├── incidents.csv      # Reported incidents
+├── contacts.csv       # Emergency contacts (sample data)
+└── requirements.txt
+```
+
+## Data files
+
+All data is stored locally next to the code. Missing CSV files are created automatically.
+
+| File | Contents |
+|---|---|
+| `routes.json` | List of routes: `id`, `name`, `polyline` (list of `[lat, lng]`) and `schedule` (list of `{start, end, days}`, with times as `HH:MM` and days `0`–`6`, Sunday = `0`) |
+| `incidents.csv` | `id, createdAt, lat, lng, type, description, start, end, days` |
+| `contacts.csv` | `id, name, whatsapp, email` |
+| `walks.csv` | Walks started in Safe Mode. Generated by the app and not tracked by git. |
+
+## WhatsApp notes
+
+- Phone numbers are converted to international format using the Ecuador country code (`593`), set in `config.py`.
+- Automatic alerts use [pywhatkit](https://pypi.org/project/pywhatkit/), which opens WhatsApp Web in your browser. This requires a desktop session and an active WhatsApp Web login. If it fails, the app shows a link to send the alert manually.
